@@ -1,0 +1,1600 @@
+---
+title: "Profit or Prestige EDA: Narrative Features, Rewards, & Network"
+author: "Lingyun Lydia Zhang"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: true
+    toc: true
+    toc_depth: 4 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4 
+knit: | 
+  (function(inputFile, encoding) { 
+    rmarkdown::render(inputFile, encoding = encoding, output_dir = "../output/") 
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE) 
+library(tidyverse) 
+library(lubridate) 
+library(janitor)
+library(knitr) 
+library(kableExtra) 
+library(e1071)
+library(tibble) 
+```
+
+# Questions
+
+1. Narrative Feature Grouping: We have ~43 base narrative features (generally measured across 3 acts, totoally . Beyond analyzing them individually, how do you suggest grouping these features (e.g., by conceptual category like Emotion, Cognition, Style)? 
+2. Genre Grouping: The dataset includes 57 detailed genre labels. For analyzing differences, what level of genre grouping do you recommend? (A simple Drama/Comedy/Other split?)
+2. Season-Level Feature Processing: I've started aggregating features to the season level by calculating the mean per feature per act (e.g., anger_1_season_mean). However, our episode-level EDA showed high skewness and important peaks for many features, which the mean alone doesn't capture. Is relying solely on the season mean sufficient?
+
+# Summary
+
+**Summary of Episode-Level Narrative-related Features Statistics**
+
+```{r episode_findings_table, echo=FALSE, results='asis'}
+
+narrative_episode_findings_summary <- tribble(
+  ~`Finding Category`, ~Observation, ~`Example Variables & Values`, ~`For Downstream Analysis`,
+
+  "1. Emotional Skewness",
+  "Episodes average a slightly positive `Tone` but with high variability, including many negative-related epsiodes",
+  "`negative` (Mean ~0.6-0.7); `joy` (Mean ~0.04-0.05, Skew ~2.2-2.8); `Tone` (Mean ~52-53, Skew ~0, SD ~15-16)",
+  "Use medians, peaks, or quantiles instead of means. Peaks may indicate high-impact Profit or Prestige moments",
+  
+  "2. Linguistic Style & Engagement",
+  "Engagement is generally high (peaking Act 2). Style shifts across acts: Analytic decreases, Clout peaks Act 2, Authentic slightly increases Act 3. WPS highly skewed.",
+  "`engaged` (Mean ~0.7); `analytic` (Act 1 ~31 vs Act 3 ~26); `clout` (Act 2 ~73); `wps` (High Skew > 9).",
+  "Use act-specific style markers (`clout_2`, `analytic_1`, `authentic_3`). High `analytic`/`authentic` may indicate Prestige. Address `wps` skew (e.g., median, peaks).",
+
+  "3. Cognitive Processing & Act Structure",
+  "Cognitive complexity features consistently peak in Act 2, while Certainty trends higher in Act 3.",
+  "`cogproc` (Act 2 ~11.3 vs Act 1 ~10.6); `insight` (Act 2 ~2.47); `certain` (Act 3 ~1.64 vs Act 1 ~1.51).",
+  "Utilize **Act 2 cognitive scores** (`cogproc_2`, `insight_2`) as potential complexity/Prestige markers. Use **Act 3 certainty** (`certain_3`) for resolution signals (Profit?). Model Act differences.",
+
+  "4. Drives & Motivations",
+  "Core drives (power, achieve, reward, risk) are event-driven, showing low averages but high positive skewness.",
+  "`power` (peaks Act 2); `reward`, `risk` (prominent Act 3); `achieve_2` (Skew 19.25); `risk_3` (Skew 4.43).",
+  "Analyze the **presence and intensity of peaks** for these drives, as they likely define key plot points relevant to genre, Profit (stakes), and Prestige (themes).",
+
+  "5. Perception & Orientation",
+  "Sensory language is used sporadically but intensely (high skew). Motion increases slightly in Act 3.",
+  "`see`, `hear`, `feel` (low Means, high Skew > 1.5); `feel_3` (Skew 6.52); `motion_3` slightly higher.",
+  "Consider **peaks in perceptual language** as potential markers for immersion or specific scene types (horror, action).",
+  
+  
+  "6. Modeling Strategy",
+  "Skewness, Act Structure, Feature Combinations, and Genre Context are critical for meaningful analysis.",
+  "Variables with Skew > |1|; Consistent Act 1-2-3 patterns; e.g., `sadness`+`insight` interaction; Genre differences.",
+  "**Address Skew** (median, quantiles, transforms). **Use Act-Specific/Difference features**. Explore **feature interactions**. **Segment or control by Genre**."
+
+)
+
+kable(narrative_episode_findings_summary,
+      caption = "Summary Table: Key Findings from Episode-Level Narrative Statistics",
+      escape = FALSE) %>% # escape = FALSE allows HTML tags like <br> and Markdown like **
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 6) %>%
+  column_spec(1, bold = TRUE, width = "7em") %>% # Make category bold, set width
+  column_spec(2, width = "15em") %>% # Observation
+  column_spec(3, width = "15em") %>% # Examples
+  column_spec(4, width = "15em") %>% # Implication
+  scroll_box(height = "450px", width = "100%") # Adjust height as needed
+
+
+```
+
+
+**Summary of Season-Level Mean Narrative Feature Statistics**
+
+This season-level view, based only on feature means, highlights stylistic choices (analytic, tone, wc, etc.) as showing the most variation between seasons. While core emotional and cognitive averages are more consistent across seasons, outlier seasons exist, and the typical 3-act structure remains visible on average. For a complete picture, these mean-based findings should be complemented by analyzing intra-season variability (like SD per season) and peak intensity (like quantiles per season).
+
+```{r season_findings_table, echo=FALSE, results='asis'}
+
+# Create the summary tibble
+season_findings_summary <- tribble(
+  ~`Finding Category`, ~Observation, ~`Example Variables & Values`, ~`For Downstream Analysis`,
+
+  # 1. Distribution Smoothing
+  "1. Distribution Smoothing",
+  "Averaging across episodes reduces extreme values and generally reduces skewness compared to episode level.",
+  "certain_1_season_mean (Skew -0.06 vs. Episode 1.84); analytic_3_season_mean (Skew 0.41 vs. Episode 0.60).",
+  "Season-level means provide a more stable baseline, useful for modeling overall season outcomes (e.g., awards, ratings).",
+
+  # 2. Persistent Skewness
+  "2. Persistent Skewness",
+  "Despite smoothing, some season averages remain highly skewed, indicating outlier seasons.",
+  "Positive: joy_2 (Skew 3.44), wps_2 (Skew 7.26), power_1 (Skew 4.21).<br>Negative: dic_2 (Skew -11.41).",
+  "Investigate outlier seasons. Their unusual profiles may correlate with Profit (e.g., joy) or Prestige (power). Consider addressing skew in models.",
+
+  # 3. High Between-Season Variability
+  "3. High Between-Season Variability",
+  "Stylistic, tonal, and structural features vary the most across seasons.",
+  "analytic (SD ~7-9), clout (SD ~7-8), tone (SD ~10-11), wc (SD ~23-26).",
+  "Prioritize these high-variance features in season-level prediction models for Profit vs. Prestige outcomes.",
+
+  # 4. Low Between-Season Variability
+  "4. Low Between-Season Variability",
+  "Core emotions and cognitive features are more stable across seasons.",
+  "sadness (SD ~0.03), fear (SD ~0.03), insight (SD ~0.4), certain (SD ~0.2-0.3).",
+  "These features may require alternative metrics (e.g., medians, quantiles) to detect subtle but meaningful variation.",
+
+  # 5. Average Act Structure
+  "5. Average Act Structure",
+  "Typical 3-act arc patterns persist at the season level.",
+  "cogproc_2_season_mean > Acts 1/3; wc_3_season_mean < Acts 1/2; neg_2_season_mean > Acts 1/3.",
+  "Narrative arc shape remains meaningful. Consider modeling act-to-act differences (e.g., Act2 - Act1).",
+
+  # 6. Limitation Reminder
+  "6. Limitation Reminder",
+  "This summary uses only season means and ignores intra-season peaks/variability.",
+  "N/A",
+  "Complement with intra-season SDs, medians, or quantiles for richer insight, especially for low-variance or skewed features."
+)
+
+# Render scrollable kable table
+season_findings_summary_table <- kable(season_findings_summary,
+      caption = "Summary Table: Key Findings from Season-Level Narrative Statistics",
+      escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 6) %>%
+  column_spec(1, bold = TRUE, width = "7em") %>% # Make category bold, set width
+  column_spec(2, width = "15em") %>% # Observation
+  column_spec(3, width = "15em") %>% # Examples
+  column_spec(4, width = "15em") %>% # Implication
+  scroll_box(height = "450px", width = "100%") # Adjust height as needed
+
+
+season_findings_summary_table
+
+```
+
+
+# Dataset Overview
+
+## Data Loading & Data Quality Check
+
+```{r load_data}
+# Define the file path
+file_path <- '/Users/sibilz/Desktop/ra/oshotse,abraham/project_data/data/merged_imdb_rt_award_all_cleaned.csv' 
+
+# --- narrative-related variables ---
+narrative_vars <- c(
+  "sd_div_mean_2", "sd_div_mean_3", 
+  "sd_sum_1", "sd_sum_2", "sd_sum_3",
+  "sd_scaled_1", "sd_scaled_2", "sd_scaled_3", 
+  "anger_1", "anger_2", "anger_3", "surprise_1", "surprise_2", "surprise_3", 
+  "disgust_1", "disgust_2", "disgust_3", "sadness_1", "sadness_2", "sadness_3", 
+  "neutral_1", "neutral_2", "neutral_3", "fear_1", "fear_2", "fear_3", 
+  "joy_1", "joy_2", "joy_3", "positive_1", "positive_2", "positive_3", 
+  "negative_1", "negative_2", "negative_3", "engaged_1", "engaged_2", "engaged_3", 
+  "not_engaged_1", "not_engaged_2", "not_engaged_3", "wc_1", "wc_2", "wc_3", 
+  "analytic_1", "analytic_2", "analytic_3", "clout_1", "clout_2", "clout_3", 
+  "authentic_1", "authentic_2", "authentic_3", "tone_1", "tone_2", "tone_3", 
+  "wps_1", "wps_2", "wps_3", "sixltr_1", "sixltr_2", "sixltr_3", 
+  "dic_1", "dic_2", "dic_3", "cogproc_1", "cogproc_2", "cogproc_3", 
+  "insight_1", "insight_2", "insight_3", "cause_1", "cause_2", "cause_3", 
+  "discrep_1", "discrep_2", "discrep_3", "tentat_1", "tentat_2", "tentat_3", 
+  "certain_1", "certain_2", "certain_3", "differ_1", "differ_2", "differ_3", 
+  "percept_1", "percept_2", "percept_3", "see_1", "see_2", "see_3", 
+  "hear_1", "hear_2", "hear_3", "feel_1", "feel_2", "feel_3", 
+  "drives_1", "drives_2", "drives_3", "affiliation_1", "affiliation_2", "affiliation_3", 
+  "achieve_1", "achieve_2", "achieve_3", "power_1", "power_2", "power_3", 
+  "reward_1", "reward_2", "reward_3", "risk_1", "risk_2", "risk_3", 
+  "relativ_1", "relativ_2", "relativ_3", "motion_1", "motion_2", "motion_3", 
+  "space_1", "space_2", "space_3", "time_1", "time_2", "time_3"
+)
+
+
+# --- Reward-related variables ---
+reward_vars <- c(
+  "viewership_(millions)", 
+  "imdb_episode_rating_score", "imdb_episode_votes_num",
+  "imdb_episode_num_award_all", "imdb_episode_num_narrative_award",
+  "imdb_episode_num_production_award", "imdb_episode_num_acting_award",
+  "imdb_season_num_award_all", "imdb_season_num_narrative_award",
+  "imdb_season_num_production_award", "imdb_season_num_acting_award",
+  "imdb_show_num_award_all", "imdb_show_num_narrative_award",
+  "imdb_show_num_production_award", "imdb_show_num_acting_award",
+  "rt_season_all_critics_score", "rt_season_all_critics_num",
+  "rt_season_all_audience_score", "rt_season_all_audience_num"
+)
+
+df_raw <- read_csv(file_path)
+
+# Identify network columns
+network_vars <- names(df_raw)[str_detect(names(df_raw), "^network_")]
+
+# Select everything needed
+selected_cols <- c("show", "season", "episode", "air_date", "genre",
+                   narrative_vars, network_vars, reward_vars)
+
+# Final dataframe
+df <- df_raw %>%
+  select(all_of(selected_cols))
+
+# Clean reward_variables
+df <- df %>%
+  mutate(
+    imdb_episode_votes_num = as.numeric(gsub(",", "", imdb_episode_votes_num)),
+    rt_season_all_critics_num = as.numeric(rt_season_all_critics_num),
+
+    # Convert Rotten Tomatoes scores: remove % and scale to 0–1
+    rt_season_all_critics_score = as.numeric(gsub("%", "", rt_season_all_critics_score)) / 100,
+    rt_season_all_audience_score = as.numeric(gsub("%", "", rt_season_all_audience_score)) / 100,
+
+    # Convert audience number to categorical variable
+    rt_season_all_audience_num = as.factor(rt_season_all_audience_num)
+  )
+
+```
+
+First, we load the dataset and perform initial quality checks to identify potential issues like missing data, duplicates, and anomalies.
+
+```{r dataset_overview_meta_summary, echo=FALSE}
+
+# Compute meta-level summary
+meta_summary <- tibble(
+  `Summary Item` = c(
+    "Number of Rows (Episodes)",
+    "Number of Unique Shows",
+    "Number of Unique Genres",
+    "Air Date Range",
+    "Season Number Range",
+    "Episode Number Range"
+  ),
+  `Value` = c(
+    nrow(df),
+    n_distinct(df$show),
+    n_distinct(df$genre),
+    paste0(min(df$air_date, na.rm = TRUE), " to ", max(df$air_date, na.rm = TRUE)),
+    paste0(min(df$season, na.rm = TRUE), " to ", max(df$season, na.rm = TRUE)),
+    paste0(min(df$episode, na.rm = TRUE), " to ", max(df$episode, na.rm = TRUE))
+  )
+)
+
+# Display summary table
+kable(meta_summary, caption = "Dataset Overview: Metadata Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 10,
+                full_width = FALSE)
+```
+Note: The air_date range is weird, it likely due to the prasing error, we can fix the format error
+
+```{r parse_air_date_correctly}
+
+# Define a cutoff year 
+cutoff_year <- 2025 
+
+# Ensure lubridate is loaded
+library(lubridate)
+library(dplyr)
+
+df <- df %>%
+  mutate(
+    air_date_temp = if (is.character(air_date)) {
+                      parse_date_time(air_date, orders = c("m/d/y", "m/d/Y", "mdy", "ymd", "dmy"), quiet = TRUE)
+                    } else if (inherits(air_date, "Date")) {
+                      as.POSIXct(air_date) # Convert Date to POSIXct for year extraction
+                    } else {
+                      air_date # Assume it might already be POSIXct/POSIXlt
+                    },
+  
+    parsed_year = year(air_date_temp),
+    
+    needs_correction = !is.na(parsed_year) & parsed_year > cutoff_year,
+    
+    air_date_corrected = if_else(needs_correction, 
+                                 air_date_temp - years(100), 
+                                 air_date_temp),
+    
+    air_date = as.Date(air_date_corrected)
+  ) %>%
+  # 
+  select(-air_date_temp, -parsed_year, -needs_correction, -air_date_corrected)
+
+# Verify the result
+cat("Corrected Air Date Range:\n")
+print(range(df$air_date, na.rm = TRUE))
+glimpse(df$air_date) # Check the type is Date
+
+```
+
+```{r check_missing_values, echo=FALSE}
+df %>%
+  summarise(across(everything(), ~ mean(is.na(.)) * 100)) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Missing (%)") %>%
+  filter(`Missing (%)` > 0) %>%
+  arrange(desc(`Missing (%)`)) %>%
+  kable(digits = 2, caption = "Percentage of Missing Values by Variable")
+```
+
+```{r check_duplicates}
+n_duplicates <- df %>% duplicated() %>% sum()
+
+cat("Number of duplicated rows:", n_duplicates)
+```
+
+```{r check_identifier_uniqueness, echo=FALSE}
+
+# Display full details for the duplicate episodes (S2E16 & S2E17)
+df %>%
+  filter(show == "2 Broke Girls", season == 2, episode %in% c(16, 17)) %>%
+  select(show, season, episode, air_date, genre, 
+         `viewership_(millions)`,
+         sd_div_mean_2, sd_div_mean_3) %>%
+  kable(caption = "Duplicate Episodes of '2 Broke Girls' - S2, E16 \\& E17") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 10,
+                full_width = FALSE)
+
+```
+- 2 Broke Girls, Season 2, Episodes 16 and 17 each appear twice in our raw dataset: their viewership is the same, but their narrative variables differ
+- I choose to keep only the first row for each episode
+
+```{r deduplicate_by_episode}
+
+original_n <- nrow(df)
+
+df <- df %>%
+  group_by(show, season, episode) %>%
+  slice(1) %>%
+  ungroup()
+
+deduped_n <- nrow(df)
+
+```
+
+## Cleaned metadata summary
+
+```{r dataset_overview_meta_cleaned_summary, echo=FALSE}
+
+# Compute cleaned metadata summary
+meta_summary <- tibble(
+  `Summary Item` = c(
+    "Number of Rows (Episodes)",
+    "Number of Unique Shows",
+    "Number of Unique Genres",
+    "Air Date Range",
+    "Season Number Range",
+    "Episode Number Range"
+  ),
+  `Value` = c(
+    nrow(df),
+    n_distinct(df$show),
+    n_distinct(df$genre),
+    paste0(min(df$air_date, na.rm = TRUE), " to ", max(df$air_date, na.rm = TRUE)),
+    paste0(min(df$season, na.rm = TRUE), " to ", max(df$season, na.rm = TRUE)),
+    paste0(min(df$episode, na.rm = TRUE), " to ", max(df$episode, na.rm = TRUE))
+  )
+)
+
+# Display summary table using kableExtra
+kable(meta_summary, caption = "Dataset Overview: Cleaned Metadata Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 6,
+                full_width = FALSE) %>%
+                column_spec(1, bold = TRUE, width = "20em") %>% # Make category bold, set width
+                column_spec(2, width = "6em") 
+
+
+```
+
+
+
+### TV Episode and Season Trends by 2-Year Period
+
+```{r preprocess_time_period}
+# 1. Create Time Period Bins (2-year intervals)
+# Load year from air_date
+df <- df %>%
+  mutate(year = year(air_date))
+
+# Create 2-year intervals
+min_year <- min(df$year, na.rm = TRUE)
+max_year <- max(df$year, na.rm = TRUE)
+
+breaks_time <- seq(floor(min_year / 2) * 2, ceiling(max_year / 2) * 2, by = 2)
+if (max(breaks_time) <= max_year) {
+  breaks_time <- c(breaks_time, max(breaks_time) + 2)
+}
+
+labels_time <- paste0(breaks_time[-length(breaks_time)], "-", breaks_time[-1] - 1)
+
+df <- df %>%
+  mutate(time_period_2yr = cut(
+    year,
+    breaks = breaks_time,
+    labels = labels_time,
+    right = FALSE,
+    include.lowest = TRUE
+  ))
+
+# Show counts by time period
+time_period_summary <- df %>%
+  count(time_period_2yr, name = "Episode Count") %>%
+  arrange(desc(`Episode Count`))
+
+```
+
+
+```{r preprocess_plots_episode_season, echo=FALSE, fig.height=10, fig.width=10}
+library(patchwork)
+
+# 1. Line + Bar Chart of Episode Counts by time period
+# Aggregate by time period
+time_period_summary <- df %>%
+  count(time_period_2yr, name = "Episode_Count") %>%
+  arrange(time_period_2yr)
+
+# Combined bar + line plot
+p_episodes_time <- ggplot(time_period_summary, aes(x = time_period_2yr, y = Episode_Count, group = 1)) +
+  geom_col(fill = "lightblue", color = "black", width = 0.7) +
+  geom_line(color = "steelblue", size = 0.8) +
+  geom_point(color = "steelblue", size = 2) +
+  geom_text(aes(label = Episode_Count), vjust = -0.8, size = 3, color = "black") +
+  labs(title = "Episode Counts by 2-Year Period",
+       x = "2-Year Time Period",
+       y = "Number of Episodes") +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 60, hjust = 1, size = 9),
+    plot.title = element_text(face = "bold", size = 13),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+
+# 2. Line + Bar Chart of Season Counts by time period
+# Find the first time period for each unique season
+season_start_time <- df %>%
+  filter(!is.na(time_period_2yr) & !is.na(season)) %>%
+  group_by(show, season) %>%
+  summarise(first_time_period = first(time_period_2yr, order_by = episode), .groups = 'drop') # Assuming episode order defines season start within data
+
+# Count unique seasons per time period
+time_period_season_summary <- season_start_time %>%
+  count(first_time_period, name = "Season_Count") %>%
+  arrange(first_time_period)
+
+# Ensure all time periods are present, even if count is 0
+# This requires joining back with all possible labels
+all_periods <- data.frame(first_time_period = factor(labels_time, levels=labels_time))
+time_period_season_summary <- all_periods %>%
+    left_join(time_period_season_summary, by="first_time_period") %>%
+    mutate(Season_Count = replace_na(Season_Count, 0)) # Replace NA counts with 0
+
+# Combined bar + line plot for Season Counts
+p_seasons_time <- ggplot(time_period_season_summary, aes(x = first_time_period, y = Season_Count, group = 1)) +
+  geom_col(fill = "lightcoral", color = "black", width = 0.7) +
+  geom_line(color = "darkred", size = 0.8) +
+  geom_point(color = "darkred", size = 2) +
+  geom_text(aes(label = Season_Count), vjust = -0.8, size = 3, color = "black") +
+  labs(title = "Unique Season Counts by 2-Year Period (Based on Season Start)",
+       x = "2-Year Time Period",
+       y = "Number of Unique Seasons ") +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 60, hjust = 1, size = 9),
+    plot.title = element_text(face = "bold", size = 13),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+# Combine plots 
+(p_episodes_time / p_seasons_time +
+   plot_layout(heights = c(1, 0.8))) +
+  plot_annotation(tag_levels = 'A',
+                  theme = theme(plot.title = element_text(size = 13, face = "bold")))
+```
+Within this dataset, both the total number of episodes and the count of unique seasons starting per 2-year period show a similar trend, rising from the early 1990s to a peak in the mid-2010s before decreasing.
+
+
+### TV genres Distibutions:  Episode-, Season-, and Show-Level Counts by 2-Year Period
+
+```{r genre_bar_chart_combined, fig.height=21, fig.width=15}
+
+library(tidyverse)
+library(scales)
+library(patchwork)
+
+# ====== COUNT STATS ======
+
+# Show-level genre counts
+genre_counts_show <- df %>%
+  group_by(show) %>%
+  summarise(genre = first(genre), .groups = "drop") %>%
+  count(genre, name = "n_show") %>%
+  mutate(
+    pct_show = n_show / sum(n_show),
+    genre_group = if_else(n_show >= 5, "≥ 5 Shows", "< 5 Shows")
+  )
+
+# Season-level genre counts
+genre_counts_season <- df %>%
+  distinct(show, season, genre) %>%
+  count(genre, name = "n_season") %>%
+  mutate(
+    pct_season = n_season / sum(n_season),
+    genre_group = if_else(n_season >= 25, "≥ 25 Seasons", "< 25 Seasons")
+  )
+
+# Episode-level genre counts
+genre_counts_episode <- df %>%
+  distinct(show, season, episode, genre) %>%
+  count(genre, name = "n_episode") %>%
+  mutate(
+    pct_episode = n_episode / sum(n_episode),
+    genre_group = if_else(n_episode >= 600, "≥ 600 Episodes", "< 600 Episodes")
+  )
+
+# Count totals
+n_genres <- n_distinct(df$genre)
+n_shows <- n_distinct(df$show)
+n_seasons <- n_distinct(paste(df$show, df$season))
+n_episodes <- n_distinct(paste(df$show, df$season, df$episode))
+
+
+# ====== PLOT FUNCTION ======
+
+plot_genre_bar <- function(data, count_col, level_name, threshold_label, group_label, threshold_color, subtitle_text) {
+  # Set colors as a named vector
+  fill_colors <- c()
+  fill_colors[group_label] <- "steelblue"
+  fill_colors[threshold_label] <- threshold_color
+  
+  ggplot(data, aes(x = fct_reorder(genre, !!sym(count_col)), y = !!sym(count_col), fill = genre_group)) +
+    geom_col(color = "black", width = 0.7) +
+    geom_text(aes(label = !!sym(count_col)), hjust = -0.2, size = 2, color = "black") +
+    scale_fill_manual(values = fill_colors) +
+    coord_flip() +
+    scale_y_continuous(
+      sec.axis = sec_axis(~ . / sum(data[[count_col]]), labels = percent, name = paste0("Percentage of ", level_name))
+    ) +
+    labs(
+      title = paste("TV Genres by", level_name, "Count"),
+      subtitle = subtitle_text,
+      x = "Genre", y = paste("Number of Unique", level_name),
+      fill = paste(level_name, "Count Group")
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      axis.text.x = element_text(size = 5),
+      plot.title = element_text(face = "bold", size = 12),
+      plot.subtitle = element_text(face = "bold", size = 10)
+    )
+}
+# ====== INDIVIDUAL PLOTS ======
+
+p_show <- plot_genre_bar(
+  genre_counts_show, "n_show", "Show",
+  threshold_label = "≥ 5 Shows", group_label = "< 5 Shows",
+  threshold_color = "firebrick",
+  subtitle_text = paste0("Total: ", n_genres, " genres across ", n_shows, " shows")
+)
+
+p_season <- plot_genre_bar(
+  genre_counts_season, "n_season", "Season",
+  threshold_label = "≥ 25 Seasons", group_label = "< 25 Seasons",
+  threshold_color = "firebrick",
+  subtitle_text = paste0("Total: ", n_genres, " genres across ", n_seasons, " seasons")
+)
+
+p_episode <- plot_genre_bar(
+  genre_counts_episode, "n_episode", "Episode",
+  threshold_label = "≥ 600 Episodes", group_label = "< 600 Episodes",
+  threshold_color = "firebrick",
+  subtitle_text = paste0("Total: ", n_genres, " genres across ", n_episodes, " episodes")
+)
+
+# ====== COMBINE PLOTS ======
+(p_episode / p_season / p_show) +
+  plot_layout(heights = c(1, 1, 1)) +
+  plot_annotation(tag_levels = 'A',
+                  theme = theme(plot.title = element_text(size = 12, face = "bold")))
+
+```
+
+```{r genre_table}
+
+# Combine summaries by full join
+genre_summary_combined <- genre_counts_show %>%
+  full_join(genre_counts_season, by = "genre") %>%
+  full_join(genre_counts_episode, by = "genre") %>%
+  arrange(desc(n_episodes)) %>%
+  mutate(across(starts_with("pct_"), ~ scales::percent(., accuracy = 0.1))) %>%
+  select(
+    Genre = genre,
+    `# Episodes` = n_episode, `% Episodes` = pct_episode, `Episode Group` = genre_group,
+    `# Seasons` = n_season, `% Seasons` = pct_season, `Season Group` = genre_group.y,
+    `# Shows` = n_show, `% Shows` = pct_show, `Show Group` = genre_group.x
+  )
+
+# Print table
+kable(genre_summary_combined,
+      caption = "Summary of Genre Distribution Across Shows, Seasons, and Episodes",
+      align = "lrrrrrrrrr") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 6) %>%
+                column_spec(1, bold = TRUE, width = "7em") %>% # Make category bold, set width
+                column_spec(2, width = "6em") %>% 
+                column_spec(3, width = "6em") %>% 
+                column_spec(4, width = "6em") %>% 
+                column_spec(5, width = "6em") %>% 
+                column_spec(6, width = "6em") %>% 
+                column_spec(7, width = "6em") %>% 
+                column_spec(8, width = "6em") %>% 
+                column_spec(9, width = "6em") %>% 
+                column_spec(10, width = "6em") %>% 
+                scroll_box(height = "450px", width = "100%") # Adjust height as needed
+
+
+```
+
+
+
+**Grouping by Name/Typical Characteristics (A Priori Assumptions)**
+
+**Grouping for Narrative/Reward Pattern Exploration**
+
+This aims to create groups that are *thematically coherent* and likely to show *meaningfully different* narrative signatures or reward patterns. It blends the above approaches.
+
+*   **Group 1: Sitcoms** (Distinct comedic format)
+*   **Group 2: Procedurals** (Combine Police, Medical, Legal, Crime Drama, Procedural, Legal Thriller - share case-of-the-week structure)
+*   **Group 3: Serialized Dramas** (Combine Serial Drama, Drama, Comedy-Drama, Family Drama, Teen Drama, Period Drama, Political Drama, Historical Drama, Psychological Drama - focus on ongoing arcs/character)
+*   **Group 4: Genre Fiction** (Combine Action*, Fantasy, Sci-Fi*, Superhero, Horror*, Supernatural*, Western*, Adventure* - includes subgenres like Action Drama, Comedy Horror etc.)
+*   **Group 5: Animation** (Combine Animated Sitcom, Adult Animation)
+*   **Group 6: Alternative Comedy** (Combine Comedy (generic), Black Comedy, Mockumentary, Satire*, Musical, Cringe, Romantic, Sketch, Period Sitcom)
+*   **Group 7: Thrillers/Mystery** (Combine Psychological Thriller, Political Thriller, Mystery - distinct from procedural crime)
+*   **Group 8: Reality/Other** (Combine Reality Comp, Docu-reality, Talk, Variety, Anthology - likely exclude from some narrative comparisons)
+
+
+**Categorizing Groups under Profit vs. Prestige Context**
+
+*   **Likely Profit-Focused Tendency:**
+    *   **Group 1: Sitcoms:** High volume, longevity aim.
+    *   **Group 2: Procedurals:** Proven format for long runs, syndication.
+    *   *(Part of) Group 5: Animation (specifically broad appeal Animated Sitcoms)*
+    *   *Group 8: Reality/Other (often lower cost, format driven)*
+*   **Likely Prestige-Focused Tendency / Higher Variability:**
+    *   **Group 3: Serialized Dramas:** Often target awards, critical acclaim, complex narratives (though some achieve high profit).
+    *   **Group 6: Alternative Comedy:** Often critically favored, niche audiences.
+    *   **Group 7: Thrillers/Mystery:** Can be prestigious, often shorter/contained runs.
+    *   *(Part of) Group 5: Animation (specifically Adult Animation aiming for niche/critical demo)*
+*   **Mixed / High Potential for Both:**
+    *   **Group 4: Genre Fiction:** Can be massive Profit drivers (MCU, GoT) or gain Prestige through execution/themes. Success highly variable.
+
+```{r}
+genre_3cat_table <- tibble::tribble(
+  ~Simple_Category,       ~Genres,
+  "Drama",                "Action, Action drama, Action fiction, Action-adventure, Adventure, Adventure drama, Anthology, Crime, Crime drama, Drama, Fantasy, Family drama, Historical drama, Horror, Legal drama, Legal thriller, Medical drama, Mystery, Neo-Western, Period drama, Political drama, Political thriller, Police procedural, Procedural, Procedural drama, Psychological drama, Psychological horror, Psychological thriller, Science fantasy, Science fiction, Serial drama, Sports drama, Superhero, Supernatural, Supernatural drama, Teen drama, Western",
+  "Comedy",               "Animated sitcom, Black comedy, Comedy, Comedy-Drama, Comedy horror, Cringe comedy, Family sitcom, Mockumentary, Musical, News satire, Period sitcom, Political satire, Romantic comedy, Sitcom, Sketch comedy, Adult animation",
+  "Other / Exclude",      "Docu-reality, Reality competition, Talk show, Variety"
+)
+
+kable(genre_3cat_table, caption = "Genres by Simple Category (Drama, Comedy, Other)") %>%
+  kable_styling(full_width = FALSE, font_size = 10)
+```
+
+
+### TV Network Distributions: Episode & Show Counts
+
+```{r preprocess_network}
+# 2. Consolidate Network Information
+df <- df %>%
+  mutate(network = apply(df[network_vars], 1, function(row) {
+    network_name <- names(row)[row == 1]
+    if (length(network_name) == 1) {
+      sub("network_", "", network_name) # Remove prefix
+    } else {
+      NA # Handle cases with no network or multiple networks
+    }
+  })) %>%
+  relocate(network, .after = genre)
+
+# Create a factor for Network, lumping infrequent ones into 'Other'
+n_top_networks <- 18 # Choose how many top networks to keep
+df <- df %>%
+  mutate(network_grouped = fct_lump_n(network, n = n_top_networks, other_level = "Other", ties.method = "first"))
+
+```
+
+
+```{r preprocess_network_plots, echo=FALSE, fig.height=9, fig.width=9}
+library(patchwork)
+
+# 3. Network Counts (Episode Level) - Ordered Bar Chart
+network_counts_episode <- df %>%
+  filter(!is.na(network_grouped)) %>% # Exclude NA networks if any
+  count(network_grouped, name = "Episode_Count") %>%
+  mutate(network_grouped = fct_reorder(network_grouped, Episode_Count, .desc = TRUE)) # Reorder factor by count
+
+p_network_episode <- ggplot(network_counts_episode, aes(x = network_grouped, y = Episode_Count)) +
+  geom_col(aes(fill = network_grouped), color = "black", show.legend = FALSE) + # Use fill aesthetic
+  geom_text(aes(label = Episode_Count), vjust = -0.5, size = 3) +
+  scale_fill_viridis_d(option = "C") + # Use a nice discrete color scale
+  labs(title = paste("Episode Counts per Network"),
+       x = "Network Name",
+       y = "Number of Episodes") +
+  theme_minimal(base_size = 11) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1), # Rotate labels
+        plot.title = element_text(face = "bold", size = 13))
+
+# 4. Network Counts (Show Level) - Ordered Bar Chart
+network_counts_show <- df %>%
+  filter(!is.na(network_grouped)) %>%
+  distinct(show, network_grouped) %>% # Get unique show-network pairs
+  count(network_grouped, name = "Show_Count") %>%
+  mutate(network_grouped = fct_reorder(network_grouped, Show_Count, .desc = TRUE)) # Reorder factor by count
+
+p_network_show <- ggplot(network_counts_show, aes(x = network_grouped, y = Show_Count)) +
+  geom_col(aes(fill = network_grouped), color = "black", show.legend = FALSE) + # Use fill aesthetic
+  geom_text(aes(label = Show_Count), vjust = -0.5, size = 3) +
+    scale_fill_viridis_d(option = "D") +
+  labs(title = paste("Unique Show Counts per Network"),
+       x = "Network Name",
+       y = "Number of Unique Shows") +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1), # Rotate labels
+    plot.title = element_text(face = "bold", size = 13))
+
+
+# Combine plots
+(p_network_episode / p_network_show +
+   plot_layout(heights = c(1, 0.7))) +
+  plot_annotation(tag_levels = 'A',
+                  theme = theme(plot.title = element_text(size = 13, face = "bold")))
+
+
+```
+
+
+## Key Variable Definition Tables
+
+### Narrative-related Variable Overview
+
+```{r narrative_table_data_prep, include=FALSE}
+narrative_table <- data.frame(
+  `Dataset.Variable` = c( 
+    "sd_div_mean_2, sd_div_mean_3", "sd_sum_1, sd_sum_2, sd_sum_3", "sd_scaled_1, sd_scaled_2, sd_scaled_3", 
+    "anger_1, anger_2, anger_3", "surprise_1, surprise_2, surprise_3", "disgust_1, disgust_2, disgust_3",
+    "sadness_1, sadness_2, sadness_3", "neutral_1, neutral_2, neutral_3", "fear_1, fear_2, fear_3",
+    "joy_1, joy_2, joy_3", "positive_1, positive_2, positive_3", "negative_1, negative_2, negative_3",
+    "engaged_1, engaged_2, engaged_3", "not_engaged_1, not_engaged_2, not_engaged_3", "wc_1, wc_2, wc_3",
+    "analytic_1, analytic_2, analytic_3", "clout_1, clout_2, clout_3", "authentic_1, authentic_2, authentic_3",
+    "tone_1, tone_2, tone_3", "wps_1, wps_2, wps_3", "sixltr_1, sixltr_2, sixltr_3", "dic_1, dic_2, dic_3",
+    "cogproc_1, cogproc_2, cogproc_3", "insight_1, insight_2, insight_3", "cause_1, cause_2, cause_3",
+    "discrep_1, discrep_2, discrep_3", "tentat_1, tentat_2, tentat_3", "certain_1, certain_2, certain_3",
+    "differ_1, differ_2, differ_3", "percept_1, percept_2, percept_3", "see_1, see_2, see_3",
+    "hear_1, hear_2, hear_3", "feel_1, feel_2, feel_3",
+    "drives_1, drives_2, drives_3", "affiliation_1, affiliation_2, affiliation_3", "achieve_1, achieve_2, achieve_3",
+    "power_1, power_2, power_3", "reward_1, reward_2, reward_3", "risk_1, risk_2, risk_3",
+    "relativ_1, relativ_2, relativ_3", "motion_1, motion_2, motion_3", "space_1, space_2, space_3", 
+    "time_1, time_2, time_3"
+  ),
+  Description = c(
+    "This transportation measurement aims to assess how quickly a consumer becomes immersed in a story—both mentally and emotionally. It evaluates the extent to which they lose awareness of their surroundings and become absorbed in the narrative.",
+    "The sum of the standard deviation per act, which aids us in understanding the amount of emotion variance for each act.",
+    "The standard deviation scaled across all emotions for ease of comparison.",
+    "The amount of anger contained in the act.",
+    "The amount of surprise contained in the act.",
+    "The amount of disgust contained in the act.",
+    "The amount of sadness contained in the act.",
+    "The amount of neutrality contained in the act.",
+    "The amount of fear contained in the act.",
+    "The amount of joy contained in the act.",
+    "The amount of positivity contained in the act.",
+    "The amount of negativity contained in the act.",
+    "There is high psychological involvement or emotional investment, including greater use of personal pronouns, more emotional words, and greater cognitive processing contained in the act.",
+    "There is low psychological involvement or emotional investment, including lesser use of personal pronouns, less emotional words, and less cognitive processing contained in the act.",
+    "Total word count contained in the act.",
+    "The amount of analytical, formal, or logical discussion contained in the act.",
+    "The amount of social status, confidence, or leadership discussion contained in the act.",
+    "The amount of honest, non-filtered, non-regulated discussion contained in the act.",
+    "The higher the tone, the more positive the tone in the act (below 50 is considered negative).",
+    "The number of words per sentence on average contained in the act.",
+    "Percentage of words longer than six letters contained in the act.",
+    "Percentage of words that were captured as dictionary words.",
+    "An aggregate measurement that looks at the number of words that reflect active information processing and mental activities, including causation contained in the act.",
+    "One of the key elements within the cognitive process measurement that considers realizations contained in the act.",
+    "Another key element within the cognitive process measurement that examines causation between two elements contained in the act.",
+    "A key element of the cognitive process measurement that considers what should, could, or would have happened, but never did, (exploring counterfactuals) contained in the act.",
+    "A key element in the cognitive processes that looks at whether something could or could not happen (e.g., maybe, perhaps) contained in the act.",
+    "A key element in the cognitive processes that looks at absolute language (e.g., always, never) contained in the act.",
+    "An element that considers differentiation between two elements such as (hasn’t , but, else) contained in the act.",
+    "This is an aggregate measurement of terms that describe perception, such as look, heard, and feeling contained in the act.",
+    "A key aspect of perception that looks at the amount of text around viewing or seeing contained in the act.",
+    "A key aspect of perception that looks at the amount of text around hearing or listening.",
+    "A key aspect of perception that looks at references to touch or feeling contained in the act.",
+    "This is an aggregate measurement that looks at different motivations contained in an act.",
+    "This aspect looks at relations and affiliations such as ally, friend, or being social that are contained in an act.",
+    "This aspect considers the ability to win, earn success, and be better that is contained in an act.",
+    "This examines power dynamics and structures including superiority and bullying contained in an act.",
+    "This examines the types of rewards that are discussed including receiving something, prizes, and benefits that are contained in an act.",
+    "This examines the different types of dangers and doubts that are contained in an act.",
+    "This aggregate measure extends toward spatial relationships such as area, bend, and exit that are contained in an act.",
+    "This examines the ability to move, including arrive, car, and go, that are contained in an act.",
+    "This examines directions in space, including down, and in that are contained in an act.",
+    "This examines time durations, including end, until and season contained in an act."
+  ),
+  stringsAsFactors = FALSE # Important for character manipulation
+)
+
+# Add a 'base_variable' column for filtering
+# 1. Remove backticks
+# 2. Remove anything from the first comma or underscore onwards
+narrative_table <- narrative_table %>%
+  mutate(
+    clean_variable = str_replace_all(Dataset.Variable, "`", ""),
+    base_variable = str_remove(clean_variable, "[,_].*")
+    ) %>%
+  # Set original names back for display
+  rename(`Dataset Variable` = Dataset.Variable) %>%
+  select(`Dataset Variable`, Description, base_variable) # Keep base_variable for filtering
+
+# Define the groups using the base variable names
+group1_vars <- c("sd_div_mean", "sd_sum", "sd_scaled", "anger", "surprise", "disgust", "sadness", "neutral", "fear", "joy", "positive", "negative", "engaged", "not_engaged", "tone") # Added tone based on previous grouping
+group2_vars <- c("wc", "wps", "analytic", "clout", "authentic", "sixltr", "dic") # Corrected 'authenticity' to 'authentic'
+group3_vars <- c("cogproc", "insight", "cause", "discrep", "tentat", "certain", "differ") # Corrected 'tentative' to 'tentat'
+group4_vars <- c("percept", "see", "hear", "feel")
+group5_vars <- c("drives", "affiliation", "achieve", "power", "reward", "risk")
+group6_vars <- c("relativ", "motion", "space", "time")
+
+# Define a function for consistent table styling
+style_narrative_table <- function(kable_output) {
+  kable_output %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 8) %>%
+  column_spec(column = 1, width = "15em") %>%
+  column_spec(column = 2, width = "40em")
+}
+```
+
+```{r narrative_table_full_display, echo=FALSE, results='asis'}
+narrative_table %>%
+  select(`Dataset Variable`, Description) %>% # Select only display columns
+  kable(caption = " Narrative Variable Overview (Definitions from NLP Dictionary)") %>%
+  style_narrative_table() %>%
+  scroll_box(height = "500px", width = "100%") # Add scroll box for the potentially long table
+```
+
+Note: Please note that designations _1, _2, _3 mean Act 1, 2, or 3 in the particular TV episode. This was determined based on the length of words in each script to get a sense of how emotions may have varied per story.
+
+
+### Reward-Related Variables Overview
+
+```{r reward_table_formatted, echo=FALSE, results='asis'}
+# Data frame for SELECTED Reward Variables for quantitative EDA
+reward_table_fmt <- data.frame(
+  `Variable Name` = c(
+    "viewership_(millions)", 
+    "imdb_episode_rating_score", 
+    "imdb_episode_votes_num", 
+    "imdb_episode_num_award_all", "imdb_episode_num_narrative_award", "imdb_episode_num_production_award", "imdb_episode_num_acting_award", 
+    "imdb_season_num_award_all", "imdb_season_num_narrative_award", "imdb_season_num_production_award", "imdb_season_num_acting_award", 
+    "imdb_show_num_award_all", "imdb_show_num_narrative_award", "imdb_show_num_production_award", "imdb_show_num_acting_award", 
+    "rt_season_all_critics_score", "rt_season_all_critics_num", 
+    "rt_season_all_audience_score", "rt_season_all_audience_num"
+  ),
+  Level = c(
+    "Episode", 
+    "Episode", 
+    "Episode", 
+    "Episode", "Episode", "Episode", "Episode", 
+    "Season", "Season", "Season", "Season", 
+    "Show", "Show", "Show", "Show", 
+    "Season", "Season", 
+    "Season", "Season"
+  ),
+  Description = c(
+    "The number of viewers (in millions) who watched the episode. (Reflects number of viewers during episode's debut based on Nielsen ratings).", 
+    "IMDb user rating score (e.g., 8.3)", 
+    "Number of IMDb user votes", 
+    "Total number of awards the episode has received", 
+    "Number of narrative awards at the episode level", 
+    "Number of production awards at the episode level", 
+    "Number of acting awards at the episode level", 
+    "Total number of awards the season has received", 
+    "Number of narrative awards at the season level", 
+    "Number of production awards at the season level", 
+    "Number of acting awards at the season level", 
+    "Total number of awards the show has received", 
+    "Number of narrative awards at the show level", 
+    "Number of production awards at the show level", 
+    "Number of acting awards at the show level", 
+    "Rotten Tomatoes critic score for the season (0–100)", 
+    "Number of critic reviews for the season", 
+    "Rotten Tomatoes audience score for the season (0–100)", 
+    "Number of audience ratings for the season"
+  )
+)
+
+# Set column names explicitly 
+colnames(reward_table_fmt) <- c("Variable Name", "Level", "Description")
+
+# Use knitr::kable and kableExtra for styling
+kable(reward_table_fmt, 
+      caption = "Selected Reward-Related Variables for Analysis") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = FALSE,
+                font_size = 8) %>%
+  column_spec(column = 1, width = "18em") %>%
+  column_spec(column = 2, width = "8em") %>%
+  column_spec(column = 3, width = "25em")
+
+```
+
+# Narrative-related Variable Analysis
+
+This section explores the distributions of all narrative features.
+
+## Overall Distributions
+
+### Episode Level Analysis
+
+
+```{r stat_table}
+library(moments) # For skewness
+
+# Calculate descriptive statistics for narrative variables
+narrative_stats <- df %>%
+  summarise(across(all_of(narrative_vars),
+                   list(
+                     Mean = ~mean(., na.rm = TRUE),
+                     StdDev = ~sd(., na.rm = TRUE),
+                     Min = ~min(., na.rm = TRUE),
+                     Max = ~max(., na.rm = TRUE),
+                     Q25 = ~quantile(., 0.25, na.rm = TRUE),
+                     Median = ~median(., na.rm = TRUE),
+                     Q75 = ~quantile(., 0.75, na.rm = TRUE),
+                     Skew = ~skewness(., na.rm = TRUE)
+                   ),
+                   .names = "{.col}__{.fn}"
+                   )) %>%
+  pivot_longer(cols = everything(),
+               names_to = c("Variable", ".value"),
+               names_sep = "__") %>%
+  mutate(across(where(is.numeric), ~round(., 2))) # Round for display
+
+# Display the table
+kable(narrative_stats, caption = "Descriptive Statistics for Narrative Variables (Episode Level)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7,
+                full_width = FALSE) %>%
+  scroll_box(height = "400px") # Add scroll box if table is too long
+
+```
+Note: `sd_div_mean_1` is missing from our raw dataset. 
+
+```{r distribution_plot}
+library(patchwork) # For combining plots
+
+# --- Function to plot distribution for a variable group ---
+plot_narrative_group <- function(df_long, var_base, title, use_log = FALSE) {
+  col_to_plot <- if (use_log) "value_log" else "value"
+  p_dens <- ggplot(df_long %>% filter(variable_base == var_base),
+                   aes(x = value, color = act, fill = act)) +
+    geom_density(alpha = 0.3) +
+    facet_wrap(~ act, scales = "free_y", ncol = 1) +
+    labs(title = paste(title, "- Density"), x = NULL, y = "Density") +
+    theme_minimal(base_size = 6) +
+    theme(legend.position = "none",
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank())
+
+  p_box <- ggplot(df_long %>% filter(variable_base == var_base),
+                  aes(x = act, y = value, fill = act)) +
+    geom_boxplot(outlier.shape = NA) + # Hide outliers for clarity here
+    geom_jitter(width = 0.1, alpha = 0.05, size = 0.5, aes(color=act)) + # Add jitter
+    coord_flip() +
+    labs(title = paste(title, "- Boxplot"), x = NULL, y = "Value") +
+    theme_minimal(base_size = 6) +
+    theme(legend.position = "none") +
+    scale_y_continuous(limits = quantile( (df_long %>% filter(variable_base == var_base))$value, c(0.01, 0.99), na.rm = TRUE)) # Zoom into interquantile range
+
+  p_hist <- ggplot(df_long %>% filter(variable_base == var_base),
+                   aes(x = value, fill = act)) +
+    geom_histogram(bins = 30, alpha = 0.7, position = "identity") +
+    facet_wrap(~ act, scales = "free_y", ncol = 1) +
+    labs(title = paste(title, "- Histogram"), x = "Value", y = "Count") +
+    theme_minimal(base_size = 6) +
+    theme(legend.position = "none")
+
+  # Combine plots using patchwork
+  (p_dens | p_box | p_hist) + plot_layout(widths = c(1, 1, 1))
+}
+
+# --- Pivot data longer for easier plotting ---
+df_narrative_long <- df %>%
+  select(show, season, episode, all_of(narrative_vars)) %>%
+  pivot_longer(cols = all_of(narrative_vars),
+               names_to = "variable_full",
+               values_to = "value") %>%
+  mutate(
+    act = str_extract(variable_full, "_[1-3]$"),
+    act = ifelse(!is.na(act), paste0("Act ", str_remove(act, "_")), NA),
+    variable_base = str_remove(variable_full, "_[1-3]$")
+  ) %>%
+  filter(!is.na(act)) # keep only variables with act suffix
+
+```
+
+#### Group 1: Immersion & Emotion
+
+```{r narrative_table_group1, echo=FALSE, results='asis'}
+narrative_table %>%
+  slice(1:14) %>%
+  select(`Dataset Variable`, Description) %>%
+  kable(caption = "Group 1: Immersion and Emotions") %>%
+  style_narrative_table()
+
+narrative_stats %>%
+  slice(1:8) %>%
+  kable(caption = "Narrative Group 1: Immersion and Emotion - Descriptive Stats") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7, full_width = FALSE) %>%
+  scroll_box(height = "400px")
+
+plot_narrative_group(df_narrative_long, "sd_div_mean", "Narrative Immersion Score", use_log = TRUE)
+plot_narrative_group(df_narrative_long, "sd_sum", "Sum of Std Dev (Emotion Variance)")
+plot_narrative_group(df_narrative_long, "sd_scaled", "Scaled Std Dev (Across Emotions)")
+```
+
+```{r narrative_stats_group1_2}
+narrative_stats %>%
+  slice(9:41) %>%
+  kable(caption = "Narrative Group 1: Immersion and Emotion - Descriptive Stats") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7, full_width = FALSE) %>%
+  scroll_box(height = "400px")
+
+plot_narrative_group(df_narrative_long, "anger", "Anger Intensity", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "surprise", "Surprise Intensity", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "disgust", "Disgust Intensity", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "sadness", "Sadness Intensity", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "fear", "Fear Intensity", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "joy", "Joy Intensity", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "positive", "Positive Emotion Words", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "negative", "Negative Emotion Words", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "engaged", "Psychological Engagement", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "not_engaged", "Psychological Disengagement", use_log = FALSE)
+
+
+```
+
+
+#### Group 2: Stylistic & Structural
+
+```{r narrative_table_group2, echo=FALSE, results='asis'}
+narrative_table %>%
+  slice(15:22) %>%
+  select(`Dataset Variable`, Description) %>%
+  kable(caption = "Narrative Group 2: Stylistic and Structural") %>%
+  style_narrative_table()
+
+narrative_stats %>%
+  slice(42:65) %>%
+  kable(caption = "Narrative Group 2: Stylistic and Structural") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7, full_width = FALSE) %>%
+  scroll_box(height = "400px")
+
+plot_narrative_group(df_narrative_long, "wc", "Word Count per Act")
+plot_narrative_group(df_narrative_long, "wps", "Words per Sentence")
+plot_narrative_group(df_narrative_long, "analytic", "Analytical Thinking Score")
+plot_narrative_group(df_narrative_long, "clout", "Clout (Confidence) Score")
+plot_narrative_group(df_narrative_long, "authentic", "Authenticity Score")
+plot_narrative_group(df_narrative_long, "tone", "Linguistic Tone Score", use_log = FALSE)
+plot_narrative_group(df_narrative_long, "sixltr", "Use of Long Words (6+ letters)")
+plot_narrative_group(df_narrative_long, "dic", "Dictionary Coverage")
+```
+Note: For `Tone`, below 50 is considered negative. May consider transforming this variable. 
+
+
+#### Group 3: Cognitive Processes
+
+```{r narrative_table_group3, echo=FALSE, results='asis'}
+
+narrative_table %>%
+  slice(23:29) %>%
+  select(`Dataset Variable`, Description) %>%
+  kable(caption = "Narrative Group 3: Cognitive Processes") %>%
+  style_narrative_table()
+
+narrative_stats %>%
+  slice(66:86) %>%
+  kable(caption = "Narrative Group 3: Cognitive Processes") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7, full_width = FALSE) %>%
+  scroll_box(height = "400px")
+
+
+plot_narrative_group(df_narrative_long, "cogproc", "Cognitive Processes")
+plot_narrative_group(df_narrative_long, "insight", "Insight (Realizations)")
+plot_narrative_group(df_narrative_long, "cause", "Causation Language")
+plot_narrative_group(df_narrative_long, "discrep", "Discrepancies (Counterfactuals)")
+plot_narrative_group(df_narrative_long, "tentat", "Tentative Language (e.g., maybe, perhaps)")
+plot_narrative_group(df_narrative_long, "certain", "Certainty Language (e.g., always, never)")
+plot_narrative_group(df_narrative_long, "differ", "Differentiation (e.g., but, else)")
+```
+
+#### Group 4: Sensory & Perceptual Language
+
+```{r narrative_table_group4, echo=FALSE, results='asis'}
+
+narrative_table %>%
+  slice(30:33) %>%
+  select(`Dataset Variable`, Description) %>%
+  kable(caption = "Narrative Group 4: Sensory and Perceptual Language") %>%
+  style_narrative_table()
+
+narrative_stats %>%
+  slice(87:98) %>%
+  kable(caption = "Narrative Group 4: Sensory and Perceptual Language") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7, full_width = FALSE) %>%
+  scroll_box(height = "400px")
+
+plot_narrative_group(df_narrative_long, "percept", "General Perception Terms")
+plot_narrative_group(df_narrative_long, "see", "Visual Perception (e.g., see, look)")
+plot_narrative_group(df_narrative_long, "hear", "Auditory Perception (e.g., hear, listen)")
+plot_narrative_group(df_narrative_long, "feel", "Tactile Perception (e.g., feel, touch)")
+
+
+```
+
+#### Group 5: Motivational & Social Drives
+
+```{r narrative_table_group5, echo=FALSE, results='asis'}
+
+narrative_table %>%
+  slice(34:39) %>%
+  select(`Dataset Variable`, Description) %>%
+  kable(caption = "Narrative Group 5: Motivational and Social Drives") %>%
+  style_narrative_table()
+
+narrative_stats %>%
+  slice(99:116) %>%
+  kable(caption = "Narrative Group 5: Motivational and Social Drives") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7, full_width = FALSE) %>%
+  scroll_box(height = "400px")
+
+plot_narrative_group(df_narrative_long, "drives", "General Motivation Terms")
+plot_narrative_group(df_narrative_long, "affiliation", "Affiliation & Social Bonds")
+plot_narrative_group(df_narrative_long, "achieve", "Achievement & Success Drive")
+plot_narrative_group(df_narrative_long, "power", "Power & Dominance")
+plot_narrative_group(df_narrative_long, "reward", "Reward & Incentives")
+plot_narrative_group(df_narrative_long, "risk", "Risk & Danger Expressions")
+
+```
+
+#### Group 6: Spatial & Temporal Orientation
+
+```{r narrative_table_group6, echo=FALSE, results='asis'}
+
+narrative_table %>%
+  slice(35:43) %>%
+  select(`Dataset Variable`, Description) %>%
+  kable(caption = "Narrative Group 6: Spatial and Temporal Orientation") %>%
+  style_narrative_table()
+
+narrative_stats %>%
+  slice(117:128) %>%
+  kable(caption = "Narrative Group 6: Spatial and Temporal Orientation") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 7, full_width = FALSE) %>%
+  scroll_box(height = "400px")
+
+plot_narrative_group(df_narrative_long, "relativ", "Spatial Relations (e.g., area, bend, exit)")
+plot_narrative_group(df_narrative_long, "motion", "Motion Terms (e.g., arrive, car, go)")
+plot_narrative_group(df_narrative_long, "space", "Directional Space Terms (e.g., down, in)")
+plot_narrative_group(df_narrative_long, "time", "Temporal Duration Terms (e.g., end, until, season)")
+
+```
+
+*Interpretation*
+
+### Season Level Analysis
+
+Now, we aggregate narrative features to the season level. For each show and season, we calculate the **mean** of each narrative feature across all its episodes (e.g., `anger_1_season_mean`, `sd_div_mean_2_season_mean`). We then examine the summary statistics and distributions of these season-level averages.
+
+Note: We start to explore season-level patterns with the **Mean**, but based on our episode-level analysis, the mean ignores the intra-season variability information. Also, as we saw at the episode level, many features are highly skewed. Related to skewness, the mean doesn't capture the intensity or frequency of peak emotional or narrative moments.
+
+```{r season_aggregation, include=FALSE}
+
+narrative_vars_present_in_df <- intersect(narrative_vars, names(df))
+
+# Group by show and season, then calculate the mean for each narrative variable
+df_season <- df %>%
+  group_by(show, season) %>%
+  summarise(
+    # Apply mean function across all relevant narrative columns
+    across(
+      all_of(narrative_vars_present_in_df), # Use only narrative vars present in df
+      ~ mean(.x, na.rm = TRUE),      # Calculate mean, removing NAs within each group
+      .names = "{.col}_season_mean"  # New variable names (e.g., anger_1_season_mean)
+    ),
+    .groups = 'drop' # Drop grouping structure after summarising
+  ) %>%
+  # Handle potential NaN values resulting from groups with all NAs for a variable
+  mutate(across(where(is.numeric), ~ifelse(is.nan(.x), NA, .x)))
+
+# Identify the names of the newly created season mean columns
+all_season_names <- names(df_season)
+season_narrative_vars <- all_season_names[stringr::str_ends(all_season_names, "_season_mean")]
+
+```
+
+```{r Calculate and Display Summary Statistics for Season-Level Features}
+
+if (nrow(df_season) > 0 && length(season_narrative_vars) > 0) {
+
+  # Calculate summary statistics for the season-level means
+  narrative_season_stats <- df_season %>%
+    select(all_of(season_narrative_vars)) %>% # Select only the season mean columns
+    summarise(across(everything(),
+                     list(
+                       Mean = ~mean(., na.rm = TRUE),
+                       StdDev = ~sd(., na.rm = TRUE),
+                       Min = ~min(., na.rm = TRUE),
+                       Max = ~max(., na.rm = TRUE),
+                       Skew = ~if(sum(!is.na(.)) > 2) e1071::skewness(., na.rm = TRUE, type=3) else NA_real_
+                     ),
+                     .names = "{.col}__{.fn}" # Using double underscore separator
+    )) %>%
+    pivot_longer(cols = everything(),
+                 names_to = c("Variable", ".value"),
+                 names_sep = "__") %>%
+    mutate(
+      Range = Max - Min, # Calculate range
+      across(where(is.numeric), round, 2) # Round numeric values
+      ) %>%
+    select(Variable, Mean, StdDev, Min, Max, Skew, Range) 
+
+  # Display the statistics table
+  kable(narrative_season_stats,
+        caption = "Descriptive Statistics for Season-Level Mean Narrative Features",
+        col.names = c("Season Variable (Mean)", "Overall Mean", "Std Dev", "Min", "Max", "Skew", "Range"),
+        digits = 2) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE,
+                  font_size = 7) %>% # Smaller font for potentially many rows
+    column_spec(1, width = "18em") %>% # Adjust widths if needed
+    scroll_box(height = "500px", width = "100%") # Scroll box for long table
+
+} else {
+  cat("Season-level dataframe ('df_season') or season narrative variables not found/empty. Cannot calculate statistics.\\n")
+}
+
+```
+
+```{r Generate Density Plots for Season-Level Features}
+
+library(ggrepel)  # for labeling lines
+
+df_season_long <- df_season %>%
+  pivot_longer(cols = all_of(season_narrative_vars),
+               names_to = "variable_full",
+               values_to = "value") %>%
+  mutate(
+    variable_base = str_remove(variable_full, "_[1-3]_season_mean$"), # Keep base name like anger
+    act = str_extract(variable_full, "_[1-3](?=_season_mean$)"), # extract "1", "2", "3"
+    act = ifelse(!is.na(act), paste0("Act ", act), NA)
+  ) %>%
+  filter(!is.na(act)) # keep only act variables
+
+
+plot_season_density_grouped <- function(df_long, var_bases, title) {
+  df_filtered <- df_long %>%
+    filter(variable_base %in% var_bases)
+
+  # Find peak locations to place labels
+  label_data <- df_filtered %>%
+    group_by(act, variable_base) %>%
+    summarise(
+      peak_x = value[which.max(density(value, na.rm = TRUE)$y)],
+      peak_y = max(density(value, na.rm = TRUE)$y),
+      .groups = "drop"
+    )
+  
+
+  ggplot(df_filtered, aes(x = value, fill = variable_base, color = variable_base)) +
+    geom_density(alpha = 0.4, size = 0.8) +
+    geom_text_repel(
+      data = label_data,
+      aes(x = peak_x, y = peak_y, label = variable_base, color = variable_base),
+      inherit.aes = FALSE,
+      size = 3,
+      direction = "y",
+      nudge_x = 0.02,
+      segment.color = NA,    
+      show.legend = TRUE
+    ) +
+    facet_wrap(~ act, scales = "free_y", ncol = 1) +
+    labs(
+      title = paste("Season-Level Density -", title),
+      x = "Season-Averaged Value",
+      y = "Density",
+      fill = "Variable",
+      color = "Variable"
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(size = 13, face = "bold"),
+      strip.text = element_text(size = 10, face = "bold")
+    )
+}
+
+
+```
+
+#### Group 1: Immersion & Emotion
+
+```{r narrative_table_season_group1, echo=FALSE, results='asis'}
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("sd_div_mean"),
+                            title = "Group1: Basic Immersion-Emotion Scores (Season Average)")
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("sd_sum"),
+                            title = "Group1: Basic Immersion-Emotion Scores (Season Average)")
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("sd_scaled"),
+                            title = "Group1: Basic Immersion-Emotion Scores (Season Average)")
+
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("anger", "surprise", "disgust", "sadness", "fear", "joy"),
+                            title = "Group1: Basic Emotion Scores (Season Average)")
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("positive", "negative", "engaged", "not_engaged"),
+                            title = "Group1: Basic Emotion Scores (Season Average)")
+
+```
+Note: For `Tone`, below 50 is considered negative.
+
+#### Group 2: Stylistic & Structural
+
+```{r narrative_table_season_group2, echo=FALSE, results='asis'}
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("wc", "dic", "sixltr"),
+                            title = " Group 2: Stylistic and Structural (Season Average)" )
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("analytic", "clout", "authnentic", "tone"),
+                            title = " Group 2: Stylistic and Structural (Season Average)" )
+
+```
+
+
+
+#### Group 3: Cognitive Processes
+
+```{r narrative_table_season_group3, echo=FALSE, results='asis'}
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("cogproc"),
+                            title = " Group 3: Cognitive Processes" )
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("cogproc", "insight", "cause"),
+                            title = " Group 3: Realization and Causation Language" )
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("discrep", "tentat", "certain", "differ", "cogproc"),
+                            title = " Group 3: Cognitive Processes" )
+```
+
+#### Group 4: Sensory & Perceptual Language
+
+```{r narrative_table_season_group4, echo=FALSE, results='asis'}
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("percept"),
+                            title = "Group 4: General Perception Terms")
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("percept", "see", "hear", "feel"),
+                            title = "Group 4: Sensory and Perceptual Language")
+
+```
+
+#### Group 5: Motivational & Social Drives
+
+```{r narrative_table_season_group5, echo=FALSE, results='asis'}
+
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("drives"),
+                            title = "Group 5: General Motivation Termss")
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("drives", "affiliation", "achieve", "power", "reward", "risk"),
+                            title = "Affiliation, Achievement, Power, Reward, Risk Expressions")
+
+```
+
+#### Group 6: Spatial & Temporal Orientation
+
+```{r narrative_table_season_group6, echo=FALSE, results='asis'}
+
+plot_season_density_grouped(df_season_long,
+                            var_bases = c("relativ", "motion", "space", "time"),
+                            title = "Group 6: Spatial and Temporal Terms")
+
+
+```
+
+*Interpretation*
+
+This season-level view, based only on feature means, highlights stylistic choices (analytic, tone, wc, etc.) as showing the most variation between seasons. While core emotional and cognitive averages are more consistent across seasons, outlier seasons exist, and the typical 3-act structure remains visible on average. For a complete picture, these mean-based findings should be complemented by analyzing intra-season variability (like SD per season) and peak intensity (like quantiles per season).
+
+```{r }
+season_findings_summary_table
+```
+
+
+## Distributions by Genre
+
+```{r}
+genre_3cat_table <- tibble::tribble(
+  ~Simple_Category,       ~Genres,
+  "Drama",                "Action, Action drama, Action fiction, Action-adventure, Adventure, Adventure drama, Anthology, Crime, Crime drama, Drama, Fantasy, Family drama, Historical drama, Horror, Legal drama, Legal thriller, Medical drama, Mystery, Neo-Western, Period drama, Political drama, Political thriller, Police procedural, Procedural, Procedural drama, Psychological drama, Psychological horror, Psychological thriller, Science fantasy, Science fiction, Serial drama, Sports drama, Superhero, Supernatural, Supernatural drama, Teen drama, Western",
+  "Comedy",               "Animated sitcom, Black comedy, Comedy, Comedy-Drama, Comedy horror, Cringe comedy, Family sitcom, Mockumentary, Musical, News satire, Period sitcom, Political satire, Romantic comedy, Sitcom, Sketch comedy, Adult animation",
+  "Other / Exclude",      "Docu-reality, Reality competition, Talk show, Variety"
+)
+
+kable(genre_3cat_table, caption = "Genres by Simple Category (Drama, Comedy, Other)") %>%
+  kable_styling(full_width = FALSE, font_size = 10)
+```
+
+### Episode Level Analysis
+```{r plot_narrative_genre_episode}
+# Box plots/Violin plots/Density plots faceted by genre (episode level)
+```
+*Interpretation*
+
+### Season Level Analysis
+```{r plot_narrative_genre_season}
+# Box plots/Violin plots/Density plots faceted by genre (season level - aggregated)
+# Requires df_season_narrative joined with genre info
+```
+*Interpretation*
+
+## Distributions by Time Period
+
+### Episode Level Analysis
+```{r plot_narrative_time_episode}
+# Box plots/Violin plots/Density plots faceted by time_period (episode level)
+```
+*Interpretation*
+
+### Season Level Analysis
+```{r plot_narrative_time_season}
+# Box plots/Violin plots/Density plots faceted by time_period (season level - aggregated)
+# Requires df_season_narrative joined with time_period info
+```
+*Interpretation*
+
+## Distributions by Network 
+*(New Section)*
+
+### Episode Level Analysis
+```{r plot_narrative_network_episode}
+# Box plots/Violin plots/Density plots faceted by network (episode level)
+# Filter for Top N networks for clarity
+# Use the 'network' column created earlier
+```
+*Interpretation*
+
+### Season Level Analysis
+```{r plot_narrative_network_season}
+# Box plots/Violin plots/Density plots faceted by network (season level - aggregated)
+# Filter for Top N networks for clarity
+# Requires df_season_narrative joined with network info
+```
+*Interpretation*
+
+# Reward-related Variable Analysis
+
+This section explores the distributions of key reward metrics.
+
+## Overall Distributions
+
+### Episode Level Analysis
+```{r plot_rewards_overall_episode}
+# Density/Histogram plots for reward metrics (episode level)
+# Consider log scales for skewed variables (viewership, votes, awards)
+```
+*Interpretation*
+
+### Season Level Analysis
+```{r plot_rewards_overall_season}
+# Density/Histogram plots for reward metrics (season level - aggregated)
+# Requires df_season_rewards data frame
+# Consider log scales
+```
+*Interpretation*
+
+## Distributions by Genre
+
+### Episode Level Analysis
+```{r plot_rewards_genre_episode}
+# Box plots/Violin plots/Density plots faceted by genre (episode level)
+```
+*Interpretation*
+
+### Season Level Analysis
+```{r plot_rewards_genre_season}
+# Box plots/Violin plots/Density plots faceted by genre (season level - aggregated)
+# Requires df_season_rewards with genre info
+```
+*Interpretation*
+
+## Distributions by Time Period
+
+### Episode Level Analysis
+```{r plot_rewards_time_episode}
+# Box plots/Violin plots/Density plots faceted by time_period (episode level)
+```
+*Interpretation*
+
+### Season Level Analysis
+```{r plot_rewards_time_season}
+# Box plots/Violin plots/Density plots faceted by time_period (season level - aggregated)
+# Requires df_season_rewards with time_period info
+```
+*Interpretation*
+
+## Distributions by Network 
+*(New Section)*
+
+### Episode Level Analysis
+```{r plot_rewards_network_episode}
+# Box plots/Violin plots/Density plots faceted by network (episode level)
+# Filter for Top N networks for clarity
+# Use the 'network' column created earlier
+```
+*Interpretation*
+
+### Season Level Analysis
+```{r plot_rewards_network_season}
+# Box plots/Violin plots/Density plots faceted by network (season level - aggregated)
+# Filter for Top N networks for clarity
+# Requires df_season_rewards with network info
+```
+*Interpretation*
+
+# Bivariate Analysis (Preliminary)
+
+*(Optional but Recommended Next Step)*
+
+## Narrative Features vs. Reward Metrics
+```{r plot_narrative_vs_rewards}
+# Scatter plots (e.g., joy vs rating)
+# Correlation heatmaps (subset of key features)
+```
+*Interpretation*
+
+# Summary & Next Steps
+
+*(Your summary of findings and planned next steps)*
+
