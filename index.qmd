@@ -1056,11 +1056,12 @@ narrative_stats %>%
 
 ```
 
-```{r narrative_stats_group1_1}
+```{r}
 
 plot_narrative_group(df_narrative_long, "sd_div_mean", "Narrative Immersion Score", use_log = TRUE)
 plot_narrative_group(df_narrative_long, "sd_sum", "Sum of Std Dev (Emotion Variance)")
 plot_narrative_group(df_narrative_long, "sd_scaled", "Scaled Std Dev (Across Emotions)")
+
 ```
 
 ```{r narrative_stats_group1_2}
@@ -1070,6 +1071,10 @@ narrative_stats %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 font_size = 7, full_width = FALSE) %>%
   scroll_box(height = "400px")
+
+```
+
+```{r}
 
 plot_narrative_group(df_narrative_long, "anger", "Anger Intensity", use_log = FALSE)
 plot_narrative_group(df_narrative_long, "surprise", "Surprise Intensity", use_log = FALSE)
@@ -1100,7 +1105,9 @@ narrative_stats %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 font_size = 7, full_width = FALSE) %>%
   scroll_box(height = "400px")
+```
 
+```{r}
 plot_narrative_group(df_narrative_long, "wc", "Word Count per Act")
 plot_narrative_group(df_narrative_long, "wps", "Words per Sentence")
 plot_narrative_group(df_narrative_long, "analytic", "Analytical Thinking Score")
@@ -1109,6 +1116,7 @@ plot_narrative_group(df_narrative_long, "authentic", "Authenticity Score")
 plot_narrative_group(df_narrative_long, "tone", "Linguistic Tone Score", use_log = FALSE)
 plot_narrative_group(df_narrative_long, "sixltr", "Use of Long Words (6+ letters)")
 plot_narrative_group(df_narrative_long, "dic", "Dictionary Coverage")
+
 ```
 Note: For `Tone`, below 50 is considered negative. May consider transforming this variable. 
 
@@ -1130,7 +1138,10 @@ narrative_stats %>%
                 font_size = 7, full_width = FALSE) %>%
   scroll_box(height = "400px")
 
+```
 
+
+```{r}
 plot_narrative_group(df_narrative_long, "cogproc", "Cognitive Processes")
 plot_narrative_group(df_narrative_long, "insight", "Insight (Realizations)")
 plot_narrative_group(df_narrative_long, "cause", "Causation Language")
@@ -1138,6 +1149,7 @@ plot_narrative_group(df_narrative_long, "discrep", "Discrepancies (Counterfactua
 plot_narrative_group(df_narrative_long, "tentat", "Tentative Language (e.g., maybe, perhaps)")
 plot_narrative_group(df_narrative_long, "certain", "Certainty Language (e.g., always, never)")
 plot_narrative_group(df_narrative_long, "differ", "Differentiation (e.g., but, else)")
+
 ```
 
 #### Group 4: Sensory & Perceptual Language
@@ -1156,7 +1168,10 @@ narrative_stats %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 font_size = 7, full_width = FALSE) %>%
   scroll_box(height = "400px")
+```
 
+
+```{r}
 plot_narrative_group(df_narrative_long, "percept", "General Perception Terms")
 plot_narrative_group(df_narrative_long, "see", "Visual Perception (e.g., see, look)")
 plot_narrative_group(df_narrative_long, "hear", "Auditory Perception (e.g., hear, listen)")
@@ -1181,7 +1196,10 @@ narrative_stats %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 font_size = 7, full_width = FALSE) %>%
   scroll_box(height = "400px")
+```
 
+
+```{r}
 plot_narrative_group(df_narrative_long, "drives", "General Motivation Terms")
 plot_narrative_group(df_narrative_long, "affiliation", "Affiliation & Social Bonds")
 plot_narrative_group(df_narrative_long, "achieve", "Achievement & Success Drive")
@@ -1207,7 +1225,10 @@ narrative_stats %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 font_size = 7, full_width = FALSE) %>%
   scroll_box(height = "400px")
+```
 
+
+```{r}
 plot_narrative_group(df_narrative_long, "relativ", "Spatial Relations (e.g., area, bend, exit)")
 plot_narrative_group(df_narrative_long, "motion", "Motion Terms (e.g., arrive, car, go)")
 plot_narrative_group(df_narrative_long, "space", "Directional Space Terms (e.g., down, in)")
