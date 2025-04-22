@@ -642,7 +642,6 @@ kable(genre_summary_combined,
 ```
 
 
-
 **Grouping by Name/Typical Characteristics (A Priori Assumptions)**
 
 **Grouping for Narrative/Reward Pattern Exploration**
@@ -673,8 +672,12 @@ This aims to create groups that are *thematically coherent* and likely to show *
     *   *(Part of) Group 5: Animation (specifically Adult Animation aiming for niche/critical demo)*
 *   **Mixed / High Potential for Both:**
     *   **Group 4: Genre Fiction:** Can be massive Profit drivers (MCU, GoT) or gain Prestige through execution/themes. Success highly variable.
+    
+    
 
-```{r}
+```{r genre_3cat_table, echo=FALSE, results='asis'}
+
+# Create the genre-category lookup table
 genre_3cat_table <- tibble::tribble(
   ~Simple_Category,       ~Genres,
   "Drama",                "Action, Action drama, Action fiction, Action-adventure, Adventure, Adventure drama, Anthology, Crime, Crime drama, Drama, Fantasy, Family drama, Historical drama, Horror, Legal drama, Legal thriller, Medical drama, Mystery, Neo-Western, Period drama, Political drama, Political thriller, Police procedural, Procedural, Procedural drama, Psychological drama, Psychological horror, Psychological thriller, Science fantasy, Science fiction, Serial drama, Sports drama, Superhero, Supernatural, Supernatural drama, Teen drama, Western",
@@ -682,8 +685,13 @@ genre_3cat_table <- tibble::tribble(
   "Other / Exclude",      "Docu-reality, Reality competition, Talk show, Variety"
 )
 
-kable(genre_3cat_table, caption = "Genres by Simple Category (Drama, Comedy, Other)") %>%
-  kable_styling(full_width = FALSE, font_size = 10)
+p_genre_3cat_table <- kable(genre_3cat_table,
+      caption = "Genres by Simple Category (Drama, Comedy, Other)") %>%
+  kable_styling(full_width = FALSE, font_size = 10) %>%
+  column_spec(1, bold = TRUE, width = "7em") %>%
+  column_spec(2, width = "25em")
+
+p_genre_3cat_table
 ```
 
 
@@ -944,7 +952,6 @@ This section explores the distributions of all narrative features.
 
 ### Episode Level Analysis
 
-
 ```{r stat_table}
 library(moments) # For skewness
 
@@ -1047,6 +1054,10 @@ narrative_stats %>%
                 font_size = 7, full_width = FALSE) %>%
   scroll_box(height = "400px")
 
+```
+
+```{r narrative_stats_group1_1}
+
 plot_narrative_group(df_narrative_long, "sd_div_mean", "Narrative Immersion Score", use_log = TRUE)
 plot_narrative_group(df_narrative_long, "sd_sum", "Sum of Std Dev (Emotion Variance)")
 plot_narrative_group(df_narrative_long, "sd_scaled", "Scaled Std Dev (Across Emotions)")
@@ -1070,7 +1081,6 @@ plot_narrative_group(df_narrative_long, "positive", "Positive Emotion Words", us
 plot_narrative_group(df_narrative_long, "negative", "Negative Emotion Words", use_log = FALSE)
 plot_narrative_group(df_narrative_long, "engaged", "Psychological Engagement", use_log = FALSE)
 plot_narrative_group(df_narrative_long, "not_engaged", "Psychological Disengagement", use_log = FALSE)
-
 
 ```
 
@@ -1455,15 +1465,7 @@ season_findings_summary_table
 ## Distributions by Genre
 
 ```{r}
-genre_3cat_table <- tibble::tribble(
-  ~Simple_Category,       ~Genres,
-  "Drama",                "Action, Action drama, Action fiction, Action-adventure, Adventure, Adventure drama, Anthology, Crime, Crime drama, Drama, Fantasy, Family drama, Historical drama, Horror, Legal drama, Legal thriller, Medical drama, Mystery, Neo-Western, Period drama, Political drama, Political thriller, Police procedural, Procedural, Procedural drama, Psychological drama, Psychological horror, Psychological thriller, Science fantasy, Science fiction, Serial drama, Sports drama, Superhero, Supernatural, Supernatural drama, Teen drama, Western",
-  "Comedy",               "Animated sitcom, Black comedy, Comedy, Comedy-Drama, Comedy horror, Cringe comedy, Family sitcom, Mockumentary, Musical, News satire, Period sitcom, Political satire, Romantic comedy, Sitcom, Sketch comedy, Adult animation",
-  "Other / Exclude",      "Docu-reality, Reality competition, Talk show, Variety"
-)
-
-kable(genre_3cat_table, caption = "Genres by Simple Category (Drama, Comedy, Other)") %>%
-  kable_styling(full_width = FALSE, font_size = 10)
+p_genre_3cat_table
 ```
 
 ### Episode Level Analysis
