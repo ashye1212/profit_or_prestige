@@ -1,11 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ashye1212.github.io/profit_or_prestige/about.html</loc>
-    <lastmod>2025-04-22T20:38:39.104Z</lastmod>
+    <loc>https://ashye1212.github.io/profit_or_prestige/eda_narrative.html</loc>
+    <lastmod>2025-04-27T21:40:37.984Z</lastmod>
   </url>
   <url>
     <loc>https://ashye1212.github.io/profit_or_prestige/index.html</loc>
-    <lastmod>2025-04-27T06:33:33.111Z</lastmod>
+    <lastmod>2025-04-27T21:42:09.797Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ashye1212.github.io/profit_or_prestige/eda_rewards.html</loc>
+    <lastmod>2025-04-27T22:12:02.645Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ashye1212.github.io/profit_or_prestige/dataset_overview.html</loc>
+    <lastmod>2025-04-27T20:30:55.034Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ashye1212.github.io/profit_or_prestige/summary_findings.html</loc>
+    <lastmod>2025-04-27T15:28:48.753Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ashye1212.github.io/profit_or_prestige/bivariate_analysis.html</loc>
+    <lastmod>2025-04-27T15:28:48.751Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ashye1212.github.io/profit_or_prestige/about.html</loc>
+    <lastmod>2025-04-22T20:38:39.104Z</lastmod>
   </url>
 </urlset>
