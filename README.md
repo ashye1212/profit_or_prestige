@@ -14,4 +14,4 @@ The analysis is written in **R** and published as a **Quarto website** via GitHu
 - **R** – for data wrangling, visualization, and modeling  
 - **Quarto** – for publishing the website  
 - **Packages used**:  
-  `tidyverse`, `ggplot2`, `kableExtra`, `patchwork`, `naniar`, and others
+    `tidyverse`, `ggplot2`, `kableExtra`, `patchwork`, `naniar`, `umap`, `cluster`, `pheatmap`, and others
